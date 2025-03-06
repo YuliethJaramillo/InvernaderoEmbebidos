@@ -25,42 +25,35 @@ void readTem(void);
 AsyncTask readTemTask(2500, true, readTem);
 
 void readLuz(void);
-AsyncTask readLuzTask(3200, true, readLuz);
-
-
-void Timeout(void);
-AsyncTask TimeoutTask(5000, false, Timeout);
-
-void returAmb(void);
+AsyncTask readLuzTask(1600, true, readLuz);
 
 void pasoLuz(void);
 
-void AmbiCambEstado(void);
+void ambiEstado(void);
+
+void alarmaEstado(void);
+
+void luzEstado(void);
 
 void controlLed(void);
 
 void lecturaLuz(void);
 
-void regresoEstCA(void);
-//Instancias de TimeoutTask:
+void PasarEstRes(void);
+AsyncTask TimeEstRes(3000, false, PasarEstRes);
 
-void Timeout(void);
-AsyncTask timeout1(3000, false, Timeout);
-
-void PasaEstFor(void);
-AsyncTask timeout2(3000, false, PasarEstFor);
+void PasarEstFor(void);
+AsyncTask TimeEstFor(3000, false, PasarEstFor);
 
 void encenderLed(void);
-AsyncTask timeout3(3000, false, encenderLed);
+AsyncTask TimeEnLed(3000, false, encenderLed);
 
 void apagarLed(void);
-AsyncTask timeout4(3000, false, apagarLed);
+AsyncTask TimeApLed(3000, false, apagarLed);
 
 // State Alias
 enum State  
 {
-
-
 	Monitoreo_Ambiental = 0,
 	Monitoreo_Luz = 1,
 	Alarma = 2
@@ -101,9 +94,9 @@ void setupStateMachine()
 
 	// Add acciones
   // funciones que realiza cada funcion o cada flecha
-	stateMachine.SetOnEntering(Monitoreo_Ambiental, outputMonitoreo_Ambiental);
-	stateMachine.SetOnEntering(Monitoreo_Luz, outputMonitoreo_Luz);
-	stateMachine.SetOnEntering(Alarma, outputAlarma);
+	stateMachine.SetOnEntering(Monitoreo_Ambiental, ambiEstado);
+	stateMachine.SetOnEntering(Monitoreo_Luz, luzEstado);
+	stateMachine.SetOnEntering(Alarma, alarmaEstado);
 
 
 	stateMachine.SetOnLeaving(Monitoreo_Ambiental, []() {Serial.println("Leaving Monitoreo_Ambiental"); });
@@ -116,12 +109,13 @@ void setup()
 {
 	Serial.begin(9600);
 
+  dht.begin();
   
-  timeout3.SetIntervalMillis(300);
+  TimeEnLed.SetIntervalMillis(300);
   //timeout3.Start();
 
-  timeout4.SetIntervalMillis(700);
-  /7timeout4.Start();
+  TimeApLed.SetIntervalMillis(700);
+  //7timeout4.Start();
 
   pinMode(ledPin, OUTPUT);
 	Serial.println("Starting State Machine...");
@@ -134,9 +128,6 @@ void setup()
 
 void loop() 
 {
-	// Read user input
-	input = static_cast<Input>(readInput());
-
 	// Update State Machine
 	stateMachine.Update();
 }
@@ -170,33 +161,29 @@ int readInput()
 //  input = Reset;
 //}
 void readHum(void){
-  hum = dht.Humidity(); 
+  hum = dht.readHumidity(); 
 } 
 
 void readTem(void){
-  temp = dht.Temperature();
+  temp = dht.readTemperature();
 }
 
-void Timeout(void){
+void PasarEstRes(void){
  input = Forward;
 
 }
 
-void returAmb(void){
-  timeout1.SetIntervalMillis(3000);
-  timeout1.Start();
-}
-
-void PasaEstFor(void){
+void PasarEstFor(void){
   input = Forward;
 }
 
 void pasoLuz(void){
-  timeout2.SetIntervalMillis(5000);
-  timeout2.Start();
+  TimeEstFor.SetIntervalMillis(5000);
+  TimeEstFor.Start();
 }
 
-void AmbiCambEstado(void){
+//FUNCIONES DENTRO DEL ESTADO MONITOREO AMBIENTAL
+void ambiEstado(void){
   static bool timerStarted = false;  // Para evitar reiniciar el temporizador en cada llamada
 
   if (!timerStarted) {
@@ -204,15 +191,13 @@ void AmbiCambEstado(void){
     timerStarted = true;
   }
 
-  if (timeout2.IsExpired()) {
-    input = Forward;
+  if (TimeEstFor.IsExpired()) {
     timerStarted = false;  // Reiniciar el estado para futuras llamadas
   }
   
   else 
     if ((temp>24) && ( hum>70)){
         input = Reset;
-        controlLed();
     }
   
 }
@@ -226,87 +211,66 @@ void apagarLed(void){
 }
 void controlLed(void) {
   static bool ledOn = false;
+  bool startLuzEn = false;
 
-  if (timeout3.IsExpired()) {
-    encenderLed();
-    ledOn = true;
-    timeout4.Start();  // Inicia el segundo temporizador
+  if (!startLuzEn) {
+    TimeEnLed.Start();
+    startLuzEn = true;
   }
 
-  if (ledOn && timeout4.IsExpired()) {
+  if (TimeEnLed.IsExpired()) {
+    encenderLed();
+    ledOn = true;
+    TimeApLed.Start();  // Inicia el segundo temporizador
+  }
+
+  if (ledOn && TimeApLed.IsExpired()) {
     apagarLed();
     ledOn = false;
+    startLuzEn = false;
   }
 }
 
 
 //FUNCIONES PARA EL ESTADO DE ALARMA----------------------------------------------------
-void regresoEstCA(void) {
+void alarmaEstado(void) {
   static bool timerStarted = false;  // Variable para evitar reiniciar el temporizador
-
+  controlLed();
+  
   if (!timerStarted) {
-    timeout2.SetIntervalMillis(6000);
-    timeout2.Start();
+    TimeEstFor.SetIntervalMillis(6000);
+    TimeEstFor.Start();
     timerStarted = true;
   }
 
-  if (timeout2.IsExpired()) {
-    input = Reset;
+  if (TimeEstFor.IsExpired()) {
     timerStarted = false;  // Permite que el temporizador se pueda reiniciar en futuras llamadas
   }
 }
 
 
 //FUNCIONES PARA EL ESTADO DE LUZ-------------------------------------------------------
-void lecturaLuz(void){
+
+void readLuz(void){
   int luminosidad = analogRead(LDR_PIN);
 }
 
-void regresoEstCAdeLuz(void){
+void luzEstado(void){
 
   static bool timerStarted = false;  // Variable para evitar reiniciar el temporizador
 
   if (!timerStarted) {
-    timeout1.SetIntervalMillis(3000);
-    timeout1.Start();
+    TimeEstFor.SetIntervalMillis(3000);
+    TimeEstFor.Start();
     timerStarted = true;
   }
 
-  if (timeout1.IsExpired()) {
+  if (TimeEstFor.IsExpired()) {
     timerStarted = false;  // Permite que el temporizador se pueda reiniciar en futuras llamadas
   }
 
   if (luminosidad >= 500){
-      input = Forward;
+      input = Backward;
     }
 }
 
-// Auxiliar output functions that show the state debug
-
-/*"""void Funct_AMB_Init(void){
-  serial.println("Funct_AMB_Init ")
-  readTempTask.Start();
-}"""
-"""void Funct_AMB_Fin(void){
-  serial.println("Funct_AMB_Fin ")
-  readTempTask.Stop();
-}"""
-"""{
-	Serial.println("	Monitoreo_Ambiental   	Monitoreo_Luz    Alarma   ");
-	Serial.println("         X                                       ");
-	Serial.println();
-}
-
-void outputMonitoreo_Luz()
-{
-	Serial.println("	Monitoreo_Ambiental   	Monitoreo_Luz    Alarma   ");
-	Serial.println("                                 X                  ");
-	Serial.println();
-}
-
-void outputAlarma()
-{
-	Serial.println("	Monitoreo_Ambiental   	Monitoreo_Luz    Alarma   ");
-	Serial.println("                                                  X   ");
-	Serial.println();
-}"""*/
