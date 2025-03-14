@@ -1,10 +1,10 @@
 #include "StateMachineLib.h"
 #include "AsyncTaskLib.h"
-#define LDR_PIN A0             //REVIZAR---------------------------
+#define LDR_PIN 34             //REVIZAR---------------------------
 
-#include <DHT.h>
+#include "DHT.h"
 
-#define DHTPIN 2
+#define DHTPIN 13
 #define DHTTYPE DHT11
 
 DHT dht(DHTPIN, DHTTYPE);
@@ -13,7 +13,7 @@ float temp;
 int luminosidad = 0;
 
 //pines
-const int ledPin = 13;
+const int ledPin = 4;
 
 //void compTempFunct(void);
 //AsyncTask readTempTask(2500, true, compTempFunct);
@@ -46,10 +46,14 @@ void PasarEstFor(void);
 AsyncTask TimeEstFor(3000, false, PasarEstFor);
 
 void encenderLed(void);
-AsyncTask TimeEnLed(3000, false, encenderLed);
+
+void encenderLedd(void);
+AsyncTask TimeEnLed(3000, false, encenderLedd);
 
 void apagarLed(void);
-AsyncTask TimeApLed(3000, false, apagarLed);
+
+void apagarLedd(void);
+AsyncTask TimeApLed(3000, false, apagarLedd);
 
 // State Alias
 enum State  
@@ -73,7 +77,7 @@ enum Input
 
 // Create new StateMachine
 
-StateMachine stateMachine(4, 9);
+StateMachine stateMachine(3, 5);
 
 // Stores last user input
 Input input;
@@ -112,68 +116,72 @@ void setup()
   dht.begin();
   
   TimeEnLed.SetIntervalMillis(300);
-  //timeout3.Start();
-
+  
   TimeApLed.SetIntervalMillis(700);
-  //7timeout4.Start();
+  
 
   pinMode(ledPin, OUTPUT);
 	Serial.println("Starting State Machine...");
 	setupStateMachine();	
 	Serial.println("Start Machine Started");
+    readHumTask.Start();
+    readTemTask.Start();
+    readLuzTask.Start();
+  input = Unknown;
 
 	// Initial state
 	stateMachine.SetState(Monitoreo_Ambiental, false, true);
 }
 
-void loop() 
-{
 	// Update State Machine
-	stateMachine.Update();
+void loop() {
+    readHumTask.Update();
+    readTemTask.Update();
+    readLuzTask.Update();
+    stateMachine.Update();
+    TimeEnLed.Update();
+    TimeApLed.Update();
+    TimeEstFor.Update();
+
+    Serial.print("Estado actual: ");
+    Serial.println(stateMachine.GetState());
+    Serial.print("Valor de input: ");
+    Serial.println(input);
+    
+    if (stateMachine.GetState() == Monitoreo_Ambiental) {
+
+        Serial.println("monitoreo ambiente de loop");
+        ambiEstado(); // Evaluar continuamente la temperatura y humedad
+    }
+    if (stateMachine.GetState() == Alarma) {
+
+        Serial.println("monitoreo alarma de loop");
+        alarmaEstado(); // Evaluar continuamente la temperatura y humedad
+    }
+
 }
 
-// Auxiliar function that reads the user input
-int readInput()
-{
-	 Input currentInput = Input::Unknown;
-	if (Serial.available())
-	{
-		char incomingChar = Serial.read();
 
-		switch (incomingChar)
-		{
-			case 'R': currentInput = Input::Reset; 	break;  // sing_H
-			case 'A': currentInput = Input::Backward; break; // sing_LD
-			case 'D': currentInput = Input::Forward; break; //sing_T
-			default: break;
-		}
-	}
 
-	return currentInput;
-}
-
-//void compTempfunct(void) {
-//float hum = dht.readHumidity();
-//float temp = dht.readTemperature();
-
-// Temp = DHT.Temperature();
-//if((Temperature>24) && ( humedad>70)) {
-//  input = Reset;
-//}
 void readHum(void){
   hum = dht.readHumidity(); 
+  Serial.print("humedad: ");
+  Serial.println(hum);
 } 
 
 void readTem(void){
   temp = dht.readTemperature();
+  Serial.print("temperatura: ");
+  Serial.println(temp);
 }
 
 void PasarEstRes(void){
- input = Forward;
+ input = Reset;
 
 }
 
 void PasarEstFor(void){
+  Serial.println("Temporizador expirado, cambiando input a Forward");
   input = Forward;
 }
 
@@ -183,67 +191,91 @@ void pasoLuz(void){
 }
 
 //FUNCIONES DENTRO DEL ESTADO MONITOREO AMBIENTAL
-void ambiEstado(void){
-  static bool timerStarted = false;  // Para evitar reiniciar el temporizador en cada llamada
+static bool timerStarted = false;
+void ambiEstado(void) {
 
-  if (!timerStarted) {
+  Serial.println("estado ambiente");
+  Serial.println(temp);
+  Serial.println(hum);
+  
+
+  /*if (!timerStarted) {
+    Serial.println("Iniciando temporizador luz");
     pasoLuz();
     timerStarted = true;
+  }*/
+
+  if ((temp > 18) && (hum > 70)) {
+    Serial.println("Llegando a Alarma");
+    input = Reset;
   }
 
-  if (TimeEstFor.IsExpired()) {
-    timerStarted = false;  // Reiniciar el estado para futuras llamadas
-  }
-  
-  else 
-    if ((temp>24) && ( hum>70)){
-        input = Reset;
-    }
-  
+  /*if (TimeEstFor.IsExpired()) {
+    Serial.println("Completo temporizador luz");
+    timerStarted = false;  // Reiniciar el temporizador
+  }*/
 }
+
 
 void encenderLed(void) {
   digitalWrite(ledPin, HIGH);
 }
 
+void encenderLedd(void){};
+void apagarLedd(void){};
+
 void apagarLed(void){
   digitalWrite(ledPin, LOW);
 }
+  // Declarar fuera de la función
+
 void controlLed(void) {
-  static bool ledOn = false;
-  bool startLuzEn = false;
+    static bool ledOn = false;
 
-  if (!startLuzEn) {
-    TimeEnLed.Start();
-    startLuzEn = true;
-  }
+    if (!TimeEnLed.IsActive() && !TimeApLed.IsActive()) {
+        Serial.println("Iniciando temporizador de encendido...");
+        TimeEnLed.Start();
+    }
 
-  if (TimeEnLed.IsExpired()) {
-    encenderLed();
-    ledOn = true;
-    TimeApLed.Start();  // Inicia el segundo temporizador
-  }
+    if (TimeEnLed.IsExpired() && !ledOn) {
+        Serial.println("Encendiendo LED");
+        encenderLed();
+        ledOn = true;
+        TimeApLed.Start();
+        TimeEnLed.Stop();
+    }
 
-  if (ledOn && TimeApLed.IsExpired()) {
-    apagarLed();
-    ledOn = false;
-    startLuzEn = false;
-  }
+    if (TimeApLed.IsExpired() && ledOn) {
+        TimeEnLed.Stop();
+        Serial.println("Apagando LED");
+        apagarLed();
+        ledOn = false;
+        TimeEnLed.Start();
+        TimeApLed.Stop();
+    }
 }
+
+
+
 
 
 //FUNCIONES PARA EL ESTADO DE ALARMA----------------------------------------------------
 void alarmaEstado(void) {
+
+  Serial.println("estado alarma");
   static bool timerStarted = false;  // Variable para evitar reiniciar el temporizador
   controlLed();
   
   if (!timerStarted) {
+    Serial.println("iniciando temporizador para regresar a estado Alarma");
     TimeEstFor.SetIntervalMillis(6000);
     TimeEstFor.Start();
     timerStarted = true;
   }
 
   if (TimeEstFor.IsExpired()) {
+   
+    Serial.println("tiempo expirado");
     timerStarted = false;  // Permite que el temporizador se pueda reiniciar en futuras llamadas
   }
 }
@@ -252,7 +284,7 @@ void alarmaEstado(void) {
 //FUNCIONES PARA EL ESTADO DE LUZ-------------------------------------------------------
 
 void readLuz(void){
-  int luminosidad = analogRead(LDR_PIN);
+  luminosidad = analogRead(LDR_PIN);
 }
 
 void luzEstado(void){
