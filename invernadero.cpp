@@ -158,6 +158,10 @@ void loop() {
         Serial.println("monitoreo alarma de loop");
         alarmaEstado(); // Evaluar continuamente la temperatura y humedad
     }
+    if (stateMachine.GetState() == Monitoreo_Luz) {
+        Serial.println("monitoreo alarma de loop");
+        luzEstado(); // Evaluar continuamente la temperatura y humedad
+    }
 
 }
 
